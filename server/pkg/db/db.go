@@ -13,5 +13,35 @@ type Database interface {
 	UpdateUser(id primitive.ObjectID, update interface{}) error                                                        // Update a user's information
 	DeleteUser(id primitive.ObjectID) (*mongo.DeleteResult, error)                                                     // Delete a user by ID
 	FollowOrUnfollowUser(followingUserID, targetUserID primitive.ObjectID, action string) (*mongo.UpdateResult, error) // Follow or unfollow a user
-	
+
+	// Conversation operations
+	GetConversation(senderID, receiverID primitive.ObjectID) (*Conversation, error)
+	UpdateConversation(id primitive.ObjectID, update interface{}) error
+	CreateConversation(participant1, participant2 primitive.ObjectID) (*Conversation, error)
+
+	// Message operations
+	GetMessagesByIDs(ids []primitive.ObjectID) ([]Message, error)
+	CreateMessage(senderID, receiverID primitive.ObjectID, messageText string) (*Message, error)
+
+	RemoveBookmarkFromUser(userID, postID primitive.ObjectID) error
+
+	AddBookmarkToUser(userID, postID primitive.ObjectID) error
+
+	RemovePostFromUser(userID, postID primitive.ObjectID) error
+
+	CreateComment(authorID, postID primitive.ObjectID, text string) (*Comment, error)
+
+	DeleteCommentsByPostID(postID primitive.ObjectID) error
+
+	GetPostByID(postID primitive.ObjectID) (*Post, error)
+
+	RemoveLikeFromPost(postID, userID primitive.ObjectID) error
+
+	AddCommentToPost(postID, commentID primitive.ObjectID) error
+
+	DeletePost(postID primitive.ObjectID) error
+
+	GetCommentsByPostID(postID primitive.ObjectID) ([]Comment, error)
+
+	CreatePost(post Post) (*Post, error)
 }

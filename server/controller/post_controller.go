@@ -1,343 +1,385 @@
 package controller
 
-// import (
-// 	"fmt"
-// 	"net/http"
-// 	"time"
+import (
+	"instacloneapp/server/socket"
+	"net/http"
 
-// 	"github.com/gin-gonic/gin"
-// 	"github.com/nfnt/resize"
-// 	"github.com/cloudinary/cloudinary-go/v2"
-// 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
-// 	"github.com/sirupsen/logrus"
-// 	"gopkg.in/mgo.v2/bson"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
-// 	"your_project/models"
-// 	"your_project/socket"
-// )
+// getUserIDFromContext retrieves the user ID from the Gin context
+func getUserIDFromContext(c *gin.Context) string {
+	if userID, exists := c.Get("userId"); exists {
+		return userID.(string)
+	}
+	return ""
+}
 
-// var cld *cloudinary.Cloudinary
+// AddNewPost handles adding a new post
+func AddNewPost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authorID := c.Param("author_id")
+		authorIDObjectID, err := primitive.ObjectIDFromHex(authorID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid author ID"})
+			return
+		}
 
-// func init() {
-// 	cld, _ = cloudinary.NewFromParams("cloud_name", "api_key", "api_secret")
-// }
+		var req struct {
+			Caption string `json:"caption"`
+		}
 
-// func AddNewPost(c *gin.Context) {
-// 	authorID := c.GetString("id")
-// 	caption := c.PostForm("caption")
+		// Assuming the image is uploaded as a file
+		image, _, err := c.Request.FormFile("image")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Image required", "data": image})
+			return
+		}
 
-// 	file, _, err := c.Request.FormFile("image")
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"message": "Image required"})
-// 		return
-// 	}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+			return
+		}
 
-// 	// Resize image using the "resize" package
-// 	img, _, err := image.Decode(file)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to decode image"})
-// 		return
-// 	}
+		// Process image and upload it (replace with actual implementation)
+		imageURL := "image_url_from_cloudinary" // Replace with actual URL from cloud storage
 
-// 	resizedImg := resize.Resize(800, 800, img, resize.Lanczos3)
-// 	buffer := new(bytes.Buffer)
-// 	if err := jpeg.Encode(buffer, resizedImg, nil); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to encode image"})
-// 		return
-// 	}
+		// Create new post
+		post, err := dbInstance.CreatePost(authorIDObjectID, req.Caption, imageURL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating post"})
+			return
+		}
 
-// 	// Upload to Cloudinary
-// 	fileUri := fmt.Sprintf("data:image/jpeg;base64,%s", base64.StdEncoding.EncodeToString(buffer.Bytes()))
-// 	resp, err := cld.Upload.Upload(context.Background(), fileUri, uploader.UploadParams{Folder: "posts"})
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to upload image"})
-// 		return
-// 	}
+		// Update user with new post
+		err = dbInstance.AddPostToUser(authorIDObjectID, post.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error updating user"})
+			return
+		}
 
-// 	post := models.Post{
-// 		Caption: caption,
-// 		Image:   resp.SecureURL,
-// 		Author:  authorID,
-// 	}
+		c.JSON(http.StatusCreated, gin.H{
+			"message": "New post added",
+			"post":    post,
+			"success": true,
+		})
+	}
+}
 
-// 	if err := post.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to save post"})
-// 		return
-// 	}
+// GetAllPosts retrieves all posts
+func GetAllPosts() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		posts, err := dbInstance.GetAllPosts()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving posts"})
+			return
+		}
 
-// 	user := models.User{}
-// 	if err := user.FindByID(authorID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to find user"})
-// 		return
-// 	}
-// 	user.Posts = append(user.Posts, post.ID)
-// 	if err := user.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update user"})
-// 		return
-// 	}
+		c.JSON(http.StatusOK, gin.H{
+			"posts":   posts,
+			"success": true,
+		})
+	}
+}
 
-// 	post.Author = user
-// 	c.JSON(http.StatusCreated, gin.H{
-// 		"message": "New post added",
-// 		"post":    post,
-// 		"success": true,
-// 	})
-// }
+// GetUserPosts retrieves all posts by a specific user
+func GetUserPosts() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authorID := c.Param("author_id")
+		authorIDObjectID, err := primitive.ObjectIDFromHex(authorID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid author ID"})
+			return
+		}
 
-// func GetAllPosts(c *gin.Context) {
-// 	posts, err := models.GetPosts()
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to retrieve posts"})
-// 		return
-// 	}
+		posts, err := dbInstance.GetPostsByUserID(authorIDObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving posts"})
+			return
+		}
 
-// 	for i := range posts {
-// 		posts[i].PopulateAuthor()
-// 		posts[i].PopulateComments()
-// 	}
+		c.JSON(http.StatusOK, gin.H{
+			"posts":   posts,
+			"success": true,
+		})
+	}
+}
 
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"posts":  posts,
-// 		"success": true,
-// 	})
-// }
+// LikePost handles liking a post
+func LikePost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("user_id")
+		postID := c.Param("post_id")
 
-// func GetUserPosts(c *gin.Context) {
-// 	authorID := c.GetString("id")
-// 	posts, err := models.GetPostsByAuthor(authorID)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to retrieve posts"})
-// 		return
-// 	}
+		userIDObjectID, err := primitive.ObjectIDFromHex(userID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid user ID"})
+			return
+		}
 
-// 	for i := range posts {
-// 		posts[i].PopulateAuthor()
-// 		posts[i].PopulateComments()
-// 	}
+		postIDObjectID, err := primitive.ObjectIDFromHex(postID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid post ID"})
+			return
+		}
 
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"posts":  posts,
-// 		"success": true,
-// 	})
-// }
+		// Like the post
+		err = dbInstance.AddLikeToPost(postIDObjectID, userIDObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error liking post"})
+			return
+		}
 
-// func LikePost(c *gin.Context) {
-// 	userID := c.GetString("id")
-// 	postID := c.Param("id")
+		// Notify the post owner
+		post, err := dbInstance.GetPostByID(postIDObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving post"})
+			return
+		}
 
-// 	post := models.Post{}
-// 	if err := post.FindByID(postID); err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found", "success": false})
-// 		return
-// 	}
+		postOwnerID := post.Author.Hex()
+		if postOwnerID != userID {
+			notification := bson.M{
+				"type":    "like",
+				"userId":  userID,
+				"postId":  postID,
+				"message": "Your post was liked",
+			}
+			socketID := socket.GetReceiverSocketID(postOwnerID)
+			if socketID != "" {
+				socket.BroadcastMessageToUser(socketID, "notification", notification)
+			}
+		}
 
-// 	if err := post.AddLike(userID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to like post", "success": false})
-// 		return
-// 	}
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Post liked",
+			"success": true,
+		})
+	}
+}
 
-// 	postOwnerID := post.Author
-// 	if postOwnerID != userID {
-// 		user := models.User{}
-// 		if err := user.FindByID(userID); err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to find user"})
-// 			return
-// 		}
+// DislikePost handles the logic for disliking a post
+func DislikePost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		postID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid Post ID"})
+			return
+		}
 
-// 		notification := models.Notification{
-// 			Type:        "like",
-// 			UserID:      userID,
-// 			UserDetails: user,
-// 			PostID:      postID,
-// 			Message:     "Your post was liked",
-// 		}
-// 		postOwnerSocketID := socket.GetReceiverSocketId(postOwnerID)
-// 		socket.IO.To(postOwnerSocketID).Emit("notification", notification)
-// 	}
+		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
 
-// 	c.JSON(http.StatusOK, gin.H{"message": "Post liked", "success": true})
-// }
+		post, err := dbInstance.GetPostByID(postID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Post not found"})
+			return
+		}
 
-// func DislikePost(c *gin.Context) {
-// 	userID := c.GetString("id")
-// 	postID := c.Param("id")
+		err = dbInstance.RemoveLikeFromPost(postID, userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error disliking post"})
+			return
+		}
 
-// 	post := models.Post{}
-// 	if err := post.FindByID(postID); err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found", "success": false})
-// 		return
-// 	}
+		// Implement socket.io for real-time notification
+		user, err := dbInstance.GetUserByID(userID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "User not found"})
+			return
+		}
 
-// 	if err := post.RemoveLike(userID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to dislike post", "success": false})
-// 		return
-// 	}
+		postOwnerID := post.Author.Hex()
+		if postOwnerID != userID {
+			notification := bson.M{
+				"type":    "dislike",
+				"userId":  userID,
+				"user":    user,
+				"postId":  postID,
+				"message": "Your post was disliked",
+			}
+			socketID := getReceiverSocketID(postOwnerID)
+			if socketID != "" {
+				socket.BroadcastMessageToUser(socketID, "notification", notification)
+			}
+		}
 
-// 	postOwnerID := post.Author
-// 	if postOwnerID != userID {
-// 		user := models.User{}
-// 		if err := user.FindByID(userID); err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to find user"})
-// 			return
-// 		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Post disliked",
+			"success": true,
+		})
+	}
+}
 
-// 		notification := models.Notification{
-// 			Type:        "dislike",
-// 			UserID:      userID,
-// 			UserDetails: user,
-// 			PostID:      postID,
-// 			Message:     "Your post was disliked",
-// 		}
-// 		postOwnerSocketID := socket.GetReceiverSocketId(postOwnerID)
-// 		socket.IO.To(postOwnerSocketID).Emit("notification", notification)
-// 	}
+// AddComment handles adding a new comment to a post
+func AddComment() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		postID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid Post ID"})
+			return
+		}
 
-// 	c.JSON(http.StatusOK, gin.H{"message": "Post disliked", "success": true})
-// }
+		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
 
-// func AddComment(c *gin.Context) {
-// 	postID := c.Param("id")
-// 	userID := c.GetString("id")
-// 	text := c.PostForm("text")
+		var req struct {
+			Text string `json:"text"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid request payload"})
+			return
+		}
 
-// 	if text == "" {
-// 		c.JSON(http.StatusBadRequest, gin.H{"message": "Text is required", "success": false})
-// 		return
-// 	}
+		if req.Text == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Text is required"})
+			return
+		}
 
-// 	post := models.Post{}
-// 	if err := post.FindByID(postID); err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found", "success": false})
-// 		return
-// 	}
+		comment, err := dbInstance.CreateComment(userID, postID, req.Text)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating comment"})
+			return
+		}
 
-// 	comment := models.Comment{
-// 		Text:   text,
-// 		Author: userID,
-// 		PostID: postID,
-// 	}
-// 	if err := comment.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to save comment"})
-// 		return
-// 	}
+		err = dbInstance.AddCommentToPost(postID, comment.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error adding comment to post"})
+			return
+		}
 
-// 	post.Comments = append(post.Comments, comment.ID)
-// 	if err := post.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update post"})
-// 		return
-// 	}
+		c.JSON(http.StatusCreated, gin.H{
+			"message": "Comment added",
+			"comment": comment,
+			"success": true,
+		})
+	}
+}
 
-// 	comment.PopulateAuthor()
-// 	c.JSON(http.StatusCreated, gin.H{
-// 		"message": "Comment Added",
-// 		"comment": comment,
-// 		"success": true,
-// 	})
-// }
+// GetCommentsOfPost handles fetching comments for a post
+func GetCommentsOfPost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		postID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid Post ID"})
+			return
+		}
 
-// func GetCommentsOfPost(c *gin.Context) {
-// 	postID := c.Param("id")
+		comments, err := dbInstance.GetCommentsByPostID(postID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "No comments found"})
+			return
+		}
 
-// 	comments, err := models.GetCommentsByPostID(postID)
-// 	if err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "No comments found for this post", "success": false})
-// 		return
-// 	}
+		c.JSON(http.StatusOK, gin.H{
+			"success":  true,
+			"comments": comments,
+		})
+	}
+}
 
-// 	for i := range comments {
-// 		comments[i].PopulateAuthor()
-// 	}
+// DeletePost handles deleting a post and its comments
+func DeletePost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		postID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid Post ID"})
+			return
+		}
 
-// 	c.JSON(http.StatusOK, gin.H{"success": true, "comments": comments})
-// }
+		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
 
-// func DeletePost(c *gin.Context) {
-// 	postID := c.Param("id")
-// 	authorID := c.GetString("id")
+		post, err := dbInstance.GetPostByID(postID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Post not found"})
+			return
+		}
 
-// 	post := models.Post{}
-// 	if err := post.FindByID(postID); err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found", "success": false})
-// 		return
-// 	}
+		if post.Author.Hex() != userID {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Unauthorized"})
+			return
+		}
 
-// 	if post.Author != authorID {
-// 		c.JSON(http.StatusForbidden, gin.H{"message": "Unauthorized"})
-// 		return
-// 	}
+		err = dbInstance.DeletePost(postID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error deleting post"})
+			return
+		}
 
-// 	if err := post.Delete(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete post"})
-// 		return
-// 	}
+		err = dbInstance.DeleteCommentsByPostID(postID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error deleting comments"})
+			return
+		}
 
-// 	user := models.User{}
-// 	if err := user.FindByID(authorID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to find user"})
-// 		return
-// 	}
-// 	user.Posts = remove(user.Posts, postID)
-// 	if err := user.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update user"})
-// 		return
-// 	}
+		err = dbInstance.RemovePostFromUser(userID, postID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error updating user posts"})
+			return
+		}
 
-// 	if err := models.DeleteCommentsByPostID(postID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete comments"})
-// 		return
-// 	}
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Post deleted",
+			"success": true,
+		})
+	}
+}
 
-// 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Post deleted"})
-// }
+// BookmarkPost handles bookmarking or removing a bookmark for a post
+func BookmarkPost() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		postID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid Post ID"})
+			return
+		}
 
-// func BookmarkPost(c *gin.Context) {
-// 	postID := c.Param("id")
-// 	userID := c.GetString("id")
+		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
 
-// 	post := models.Post{}
-// 	if err := post.FindByID(postID); err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"message": "Post not found", "success": false})
-// 		return
-// 	}
+		post, err := dbInstance.GetPostByID(postID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Post not found"})
+			return
+		}
 
-// 	user := models.User{}
-// 	if err := user.FindByID(userID); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to find user"})
-// 		return
-// 	}
+		user, err := dbInstance.GetUserByID(userID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "User not found"})
+			return
+		}
 
-// 	if contains(user.Bookmarks, post.ID) {
-// 		user.Bookmarks = remove(user.Bookmarks, post.ID)
-// 	} else {
-// 		user.Bookmarks = append(user.Bookmarks, post.ID)
-// 	}
+		if contains(user.Bookmarks, postID) {
+			err = dbInstance.RemoveBookmarkFromUser(userID, postID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Error removing bookmark"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"type":    "unsaved",
+				"message": "Post removed from bookmark",
+				"success": true,
+			})
+		} else {
+			err = dbInstance.AddBookmarkToUser(userID, postID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Error adding bookmark"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"type":    "saved",
+				"message": "Post bookmarked",
+				"success": true,
+			})
+		}
+	}
+}
 
-// 	if err := user.Save(); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update bookmarks"})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"type":    ifContains(user.Bookmarks, post.ID) ? "saved" : "unsaved",
-// 		"message": ifContains(user.Bookmarks, post.ID) ? "Post bookmarked" : "Post removed from bookmark",
-// 		"success": true,
-// 	})
-// }
-
-// func contains(slice []bson.ObjectId, item bson.ObjectId) bool {
+// // Utility function to check if an ID is in a slice
+// func contains(slice []primitive.ObjectID, id primitive.ObjectID) bool {
 // 	for _, v := range slice {
-// 		if v == item {
+// 		if v == id {
 // 			return true
 // 		}
 // 	}
 // 	return false
-// }
-
-// func remove(slice []bson.ObjectId, item bson.ObjectId) []bson.ObjectId {
-// 	for i, v := range slice {
-// 		if v == item {
-// 			return append(slice[:i], slice[i+1:]...)
-// 		}
-// 	}
-// 	return slice
 // }

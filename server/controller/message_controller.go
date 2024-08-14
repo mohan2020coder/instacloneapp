@@ -1,120 +1,119 @@
 package controller
 
-// import (
-// 	"context"
-// 	"net/http"
+import (
+	"instacloneapp/server/socket"
+	"net/http"
 
-// 	// "instacloneapp/server/services"
-// 	"instacloneapp/server/socket"
+	// "instacloneapp/server/services"
 
-// 	"github.com/gin-gonic/gin"
-// 	"go.mongodb.org/mongo-driver/bson"
-// 	"go.mongodb.org/mongo-driver/bson/primitive"
-// 	"go.mongodb.org/mongo-driver/mongo"
-// )
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
-// var conversationCollection *mongo.Collection
-// var messageCollection *mongo.Collection
+// SendMessage handles sending a message
+func SendMessage() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		senderID := c.Param("id")
+		receiverID := c.Param("receiver_id")
+		var req struct {
+			TextMessage string `json:"textMessage"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+			return
+		}
 
-// func init() {
-// 	// Initialize collections (ensure `config` is properly set up)
-// 	conversationCollection = services.GetCollection("conversations")
-// 	messageCollection = services.GetCollection("messages")
-// }
+		senderObjectID, err := primitive.ObjectIDFromHex(senderID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid sender ID"})
+			return
+		}
+		receiverObjectID, err := primitive.ObjectIDFromHex(receiverID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid receiver ID"})
+			return
+		}
 
-// func SendMessage(c *gin.Context) {
-// 	var requestBody struct {
-// 		TextMessage string `json:"textMessage" binding:"required"`
-// 	}
+		// Check if conversation exists
+		conversation, err := dbInstance.GetConversation(senderObjectID, receiverObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving conversation"})
+			return
+		}
 
-// 	if err := c.BindJSON(&requestBody); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-// 		return
-// 	}
+		if conversation == nil {
+			conversation, err = dbInstance.CreateConversation(senderObjectID, receiverObjectID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating conversation"})
+				return
+			}
+		}
 
-// 	senderID, _ := primitive.ObjectIDFromHex(c.GetString("userID"))
-// 	receiverID, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		// Create a new message
+		newMessage, err := dbInstance.CreateMessage(senderObjectID, receiverObjectID, req.TextMessage)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating message"})
+			return
+		}
 
-// 	var conversation models.Conversation
-// 	filter := bson.M{"participants": bson.M{"$all": []primitive.ObjectID{senderID, receiverID}}}
-// 	err := conversationCollection.FindOne(context.Background(), filter).Decode(&conversation)
+		conversation.Messages = append(conversation.Messages, newMessage.ID)
+		err = dbInstance.UpdateConversation(conversation.ID, bson.M{"$set": bson.M{"messages": conversation.Messages}})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error updating conversation"})
+			return
+		}
 
-// 	if err == mongo.ErrNoDocuments {
-// 		conversation = models.Conversation{
-// 			Participants: []primitive.ObjectID{senderID, receiverID},
-// 		}
-// 		_, err = conversationCollection.InsertOne(context.Background(), conversation)
-// 		if err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create conversation"})
-// 			return
-// 		}
-// 	}
+		// Send real-time notification
+		receiverSocketID := socket.GetReceiverSocketID(receiverObjectID.Hex())
+		if receiverSocketID != "" {
+			socket.BroadcastMessageToUser(receiverSocketID, "newMessage", newMessage)
+		}
 
-// 	message := models.Message{
-// 		SenderID:   senderID,
-// 		ReceiverID: receiverID,
-// 		Message:    requestBody.TextMessage,
-// 	}
-// 	_, err = messageCollection.InsertOne(context.Background(), message)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save message"})
-// 		return
-// 	}
+		c.JSON(http.StatusCreated, gin.H{
+			"success":    true,
+			"newMessage": newMessage,
+		})
+	}
+}
 
-// 	// Update conversation with the new message
-// 	conversation.Messages = append(conversation.Messages, message.ID)
-// 	_, err = conversationCollection.UpdateOne(
-// 		context.Background(),
-// 		bson.M{"_id": conversation.ID},
-// 		bson.M{"$set": bson.M{"messages": conversation.Messages}},
-// 	)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update conversation"})
-// 		return
-// 	}
+// GetMessages handles retrieving messages from a conversation
+func GetMessages() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		senderID := c.Param("id")
+		receiverID := c.Param("receiver_id")
 
-// 	// Emit message through WebSocket
-// 	receiverSocketID := socket.GetReceiverSocketID(receiverID.Hex())
-// 	if receiverSocketID != "" {
-// 		socket.BroadcastToSocket(receiverSocketID, "newMessage", message)
-// 	}
+		senderObjectID, err := primitive.ObjectIDFromHex(senderID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid sender ID"})
+			return
+		}
+		receiverObjectID, err := primitive.ObjectIDFromHex(receiverID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid receiver ID"})
+			return
+		}
 
-// 	c.JSON(http.StatusCreated, gin.H{"success": true, "newMessage": message})
-// }
+		conversation, err := dbInstance.GetConversation(senderObjectID, receiverObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving conversation"})
+			return
+		}
 
-// func GetMessages(c *gin.Context) {
-// 	senderID, _ := primitive.ObjectIDFromHex(c.GetString("userID"))
-// 	receiverID, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		if conversation == nil {
+			c.JSON(http.StatusOK, gin.H{"success": true, "messages": []interface{}{}})
+			return
+		}
 
-// 	var conversation models.Conversation
-// 	filter := bson.M{"participants": bson.M{"$all": []primitive.ObjectID{senderID, receiverID}}}
-// 	err := conversationCollection.FindOne(context.Background(), filter).Decode(&conversation)
-// 	if err != nil {
-// 		if err == mongo.ErrNoDocuments {
-// 			c.JSON(http.StatusOK, gin.H{"success": true, "messages": []interface{}{}})
-// 			return
-// 		}
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve conversation"})
-// 		return
-// 	}
+		messages, err := dbInstance.GetMessagesByIDs(conversation.Messages)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error retrieving messages"})
+			return
+		}
 
-// 	var messages []models.Message
-// 	cursor, err := messageCollection.Find(context.Background(), bson.M{"_id": bson.M{"$in": conversation.Messages}})
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve messages"})
-// 		return
-// 	}
-// 	defer cursor.Close(context.Background())
-
-// 	for cursor.Next(context.Background()) {
-// 		var message models.Message
-// 		err := cursor.Decode(&message)
-// 		if err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode message"})
-// 			return
-// 		}
-// 		messages = append(messages, message)
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{"success": true, "messages": messages})
-// }
+		c.JSON(http.StatusOK, gin.H{
+			"success":  true,
+			"messages": messages,
+		})
+	}
+}

@@ -18,6 +18,35 @@ var upgrader = websocket.Upgrader{
 var userSocketMap = make(map[string]*websocket.Conn) // Stores WebSocket connections corresponding to user IDs
 var mu sync.Mutex                                    // Mutex for synchronizing access to userSocketMap
 
+// GetReceiverSocketID retrieves the WebSocket ID for a given user ID
+func GetReceiverSocketID(userID string) string {
+	mu.Lock()
+	defer mu.Unlock()
+	conn, ok := userSocketMap[userID]
+	if ok {
+		return conn.RemoteAddr().String() // Use appropriate method to get socket ID
+	}
+	return ""
+}
+
+// BroadcastMessageToUser sends a message to a specific user
+func BroadcastMessageToUser(userSocketID, event string, message interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	conn, ok := userSocketMap[userSocketID]
+	if ok {
+		err := conn.WriteJSON(map[string]interface{}{
+			"event":   event,
+			"message": message,
+		})
+		if err != nil {
+			conn.Close()
+			delete(userSocketMap, userSocketID)
+		}
+	}
+}
+
+// HandleConnection handles WebSocket connections
 func HandleConnection(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -42,7 +71,7 @@ func HandleConnection(c *gin.Context) {
 			break
 		}
 		if messageType == websocket.TextMessage {
-			fmt.Printf("Received message : %s\n", msg)
+			fmt.Printf("Received message: %s\n", msg)
 		}
 	}
 
@@ -53,6 +82,7 @@ func HandleConnection(c *gin.Context) {
 	broadcastOnlineUsers()
 }
 
+// broadcastOnlineUsers broadcasts the list of online users to all connected clients
 func broadcastOnlineUsers() {
 	mu.Lock()
 	defer mu.Unlock()
