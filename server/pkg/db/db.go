@@ -22,26 +22,19 @@ type Database interface {
 	// Message operations
 	GetMessagesByIDs(ids []primitive.ObjectID) ([]Message, error)
 	CreateMessage(senderID, receiverID primitive.ObjectID, messageText string) (*Message, error)
-
 	RemoveBookmarkFromUser(userID, postID primitive.ObjectID) error
-
 	AddBookmarkToUser(userID, postID primitive.ObjectID) error
-
 	RemovePostFromUser(userID, postID primitive.ObjectID) error
-
 	CreateComment(authorID, postID primitive.ObjectID, text string) (*Comment, error)
-
 	DeleteCommentsByPostID(postID primitive.ObjectID) error
-
 	GetPostByID(postID primitive.ObjectID) (*Post, error)
-
 	RemoveLikeFromPost(postID, userID primitive.ObjectID) error
-
 	AddCommentToPost(postID, commentID primitive.ObjectID) error
-
 	DeletePost(postID primitive.ObjectID) error
-
 	GetCommentsByPostID(postID primitive.ObjectID) ([]Comment, error)
-
 	CreatePost(post Post) (*Post, error)
+	AddPostToUser(userID primitive.ObjectID, postID primitive.ObjectID) error
+	GetAllPosts() ([]Post, error)
+	GetPostsByUserID(authorID primitive.ObjectID) ([]Post, error)
+	AddLikeToPost(postID primitive.ObjectID, userID primitive.ObjectID) error
 }

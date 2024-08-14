@@ -1,70 +1,3 @@
-// package db
-
-// import (
-// 	"context"
-// 	"errors"
-
-// 	"go.mongodb.org/mongo-driver/bson"
-// 	"go.mongodb.org/mongo-driver/bson/primitive"
-// 	"go.mongodb.org/mongo-driver/mongo"
-// 	"go.mongodb.org/mongo-driver/mongo/options"
-// )
-
-// // MongoDB implements the Database interface for MongoDB
-// type MongoDB struct {
-// 	conn *mongo.Collection
-// }
-
-// // NewMongoDB creates a new MongoDB connection
-// func NewMongoDB(uri string, dbName string, collectionName string) (*MongoDB, error) {
-// 	clientOptions := options.Client().ApplyURI(uri)
-// 	client, err := mongo.Connect(context.Background(), clientOptions)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	collection := client.Database(dbName).Collection(collectionName)
-// 	return &MongoDB{conn: collection}, nil
-// }
-
-// func (db *MongoDB) GetUsers() ([]User, error) {
-// 	cursor, err := db.conn.Find(context.Background(), bson.M{})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer cursor.Close(context.Background())
-
-// 	var users []User
-// 	for cursor.Next(context.Background()) {
-// 		var user User
-// 		if err := cursor.Decode(&user); err != nil {
-// 			return nil, err
-// 		}
-// 		users = append(users, user)
-// 	}
-
-// 	return users, nil
-// }
-
-// func (db *MongoDB) CreateUser(u User) (User, error) {
-// 	// Insert the user into the collection
-// 	result, err := db.conn.InsertOne(context.Background(), u)
-// 	if err != nil {
-// 		return User{}, err
-// 	}
-
-// 	// Extract the inserted ID and assert it to primitive.ObjectID
-// 	objectID, ok := result.InsertedID.(primitive.ObjectID)
-// 	if !ok {
-// 		return User{}, errors.New("failed to convert inserted ID to ObjectID")
-// 	}
-
-// 	// Set the ID field of the user
-// 	u.ID = objectID
-
-//		// Return the user with the MongoID set
-//		return u, nil
-//	}
 package db
 
 import (
@@ -77,18 +10,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// User represents the user model in MongoDB
-// type User struct {
-// 	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-// 	Username       string             `bson:"username" json:"username"`
-// 	Email          string             `bson:"email" json:"email"`
-// 	Password       string             `bson:"password" json:"password"`
-// 	Bio            string             `bson:"bio,omitempty" json:"bio"`
-// 	Gender         string             `bson:"gender,omitempty" json:"gender"`
-// 	ProfilePicture string             `bson:"profilePicture,omitempty" json:"profilePicture"`
-// 	Following      []primitive.ObjectID `bson:"following,omitempty" json:"following"`
-// }
 
 // MongoDB implements the Database interface for MongoDB
 type MongoDB struct {
@@ -410,4 +331,94 @@ func (db *MongoDB) CreatePost(post Post) (*Post, error) {
 	// Assign the generated ID to the post
 	post.ID = result.InsertedID.(primitive.ObjectID)
 	return &post, nil
+}
+
+// AddPostToUser adds a post ID to the user's list of posts
+func (db *MongoDB) AddPostToUser(userID primitive.ObjectID, postID primitive.ObjectID) error {
+	filter := bson.M{"_id": userID}
+	update := bson.M{
+		"$push": bson.M{"posts": postID},
+	}
+
+	_, err := db.collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetAllPosts retrieves all posts from the database
+func (db *MongoDB) GetAllPosts() ([]Post, error) {
+	var posts []Post
+	cursor, err := db.collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Iterate through the cursor and decode each document into a Post struct
+	for cursor.Next(context.Background()) {
+		var post Post
+		if err := cursor.Decode(&post); err != nil {
+			return nil, err
+		}
+		posts = append(posts, post)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return posts, nil
+}
+
+// GetPostsByUserID retrieves all posts by a specific user
+func (db *MongoDB) GetPostsByUserID(authorID primitive.ObjectID) ([]Post, error) {
+	var posts []Post
+
+	// Define the filter to match the authorID field
+	filter := bson.M{"author": authorID}
+
+	// Query the database for posts that match the authorID
+	cursor, err := db.collection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Iterate through the cursor and decode each document into a Post struct
+	for cursor.Next(context.Background()) {
+		var post Post
+		if err := cursor.Decode(&post); err != nil {
+			return nil, err
+		}
+		posts = append(posts, post)
+	}
+
+	// Check if there were any errors during cursor iteration
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return posts, nil
+}
+
+// AddLikeToPost adds a like to a post by updating the post's likes list
+func (db *MongoDB) AddLikeToPost(postID primitive.ObjectID, userID primitive.ObjectID) error {
+	// Define the filter to match the postID
+	filter := bson.M{"_id": postID}
+
+	// Define the update to add the userID to the likes array
+	update := bson.M{
+		"$addToSet": bson.M{"likes": userID},
+	}
+
+	// Perform the update operation
+	_, err := db.collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
