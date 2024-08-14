@@ -17,7 +17,7 @@ To run the application in development mode, use the following command:
 npm run dev
 
 
-This will start the NextJS development server and the Golang server.
+This will start the NextJS development server. 
 
 ## Server
 
