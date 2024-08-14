@@ -6,23 +6,24 @@ import (
 
 	"instacloneapp/server/pkg/db"
 	"instacloneapp/server/routes"
+	cloudinary "instacloneapp/server/utils"
+
+	"instacloneapp/server/socket"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
 
-	// Load environment variables from .env file if present
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
-
+	// Initialize Cloudinary
+	cloudinaryClient := cloudinary.InitCloudinary()
 	router := gin.Default()
 
 	var database db.Database
 	var err error
+
+	router.GET("/ws", socket.HandleConnection)
 
 	// Middleware
 	router.Use(gin.Logger())
@@ -59,26 +60,26 @@ func main() {
 			dbType = "sqlite" // Default to SQLite if DB_TYPE is not set
 		}
 
-		var dsn string
-		if dbType == "sqlite" {
-			dsn = os.Getenv("SQLITE_DB_PATH")
-			if dsn == "" {
-				dsn = "./test.db" // Default to a local file if SQLITE_DB_PATH is not set
-			}
-			database, err = db.NewGORMDB(dsn, "sqlite")
-		} else if dbType == "postgres" {
-			dsn = os.Getenv("POSTGRES_DSN")
-			if dsn == "" {
-				log.Fatalf("PostgreSQL DSN is not set")
-			}
-			database, err = db.NewGORMDB(dsn, "postgres")
-		} else {
-			log.Fatalf("Unsupported database type: %s", dbType)
-		}
+		// var dsn string
+		// if dbType == "sqlite" {
+		// 	dsn = os.Getenv("SQLITE_DB_PATH")
+		// 	if dsn == "" {
+		// 		dsn = "./test.db" // Default to a local file if SQLITE_DB_PATH is not set
+		// 	}
+		// 	database, err = db.NewGORMDB(dsn, "sqlite")
+		// } else if dbType == "postgres" {
+		// 	dsn = os.Getenv("POSTGRES_DSN")
+		// 	if dsn == "" {
+		// 		log.Fatalf("PostgreSQL DSN is not set")
+		// 	}
+		// 	database, err = db.NewGORMDB(dsn, "postgres")
+		// } else {
+		// 	log.Fatalf("Unsupported database type: %s", dbType)
+		// }
 
-		if err != nil {
-			log.Fatalf("Failed to connect to database: %v", err)
-		}
+		// if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+		// }
 	}
 	//db.SeedDatabase(database)
 	// Serve static files from frontend/dist
@@ -91,7 +92,8 @@ func main() {
 
 	// Setup routes
 
-	routes.SetupRoutes(router, database)
+	// Set up routes with dependencies
+	routes.SetupRoutes(router, database, cloudinaryClient)
 
 	// Catch-all route to serve index.html for SPA
 	// router.NoRoute(func(c *gin.Context) {

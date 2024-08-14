@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8080'; // URL of your Go backend
+const API_BASE_URL = 'http://localhost:8082'; // URL of your Go backend
 
 // A utility function to handle API requests
 async function apiRequest<T>(

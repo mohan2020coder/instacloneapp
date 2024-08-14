@@ -9,7 +9,9 @@ const Users = ({ data, error }) => {
         <ul className="space-y-2">
           {data.map(user => (
             <li key={user.id} className="p-2 bg-gray-100 rounded-lg shadow-sm text-gray-700">
-              {user.name}
+              {user.username}
+              {user.email}
+             
             </li>
           ))}
         </ul>
