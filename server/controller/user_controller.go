@@ -83,6 +83,7 @@ import (
 	"context"
 	"instacloneapp/server/pkg/db"
 	"instacloneapp/server/utils"
+	"log"
 	"net/http"
 
 	"github.com/cloudinary/cloudinary-go"
@@ -132,14 +133,19 @@ func Register() gin.HandlerFunc {
 			return
 		}
 
+		// Retrieve user by email
 		user, err := dbInstance.GetUserByEmail(req.Email)
 		if err != nil {
+			// Log the error for further investigation
+			log.Printf("Error checking email: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error checking email"})
 			return
 		}
 
-		if isEmptyUser(user) {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Email already in use"})
+		// Check if the user was found
+		// Assuming a zero value of user indicates "not found"
+		if user.Email != "" { // or any other field to check if user exists
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Email already exists"})
 			return
 		}
 
@@ -247,8 +253,8 @@ func EditProfile() gin.HandlerFunc {
 		}
 
 		var req struct {
-			Bio             string `json:"bio"`
-			Gender          string `json:"gender"`
+			Bio    string `json:"bio"`
+			Gender string `json:"gender"`
 		}
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
@@ -307,7 +313,7 @@ func EditProfile() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Profile updated successfully",
 			"success": true,
-			"user":   user,
+			"user":    user,
 		})
 	}
 }

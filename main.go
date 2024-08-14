@@ -42,17 +42,24 @@ func main() {
 	}
 
 	if env == "production" {
-		// Connect to MongoDB
+		// Retrieve MongoDB connection details from environment variables
 		mongoURI := os.Getenv("MONGO_URI")
 		mongoDBName := os.Getenv("MONGO_DB_NAME")
-		mongoCollection := os.Getenv("MONGO_COLLECTION")
-		if mongoURI == "" || mongoDBName == "" || mongoCollection == "" {
+		mongoCollections := os.Getenv("MONGO_COLLECTIONS")
+
+		// Ensure that all required environment variables are set
+		if mongoURI == "" || mongoDBName == "" || mongoCollections == "" {
 			log.Fatalf("MongoDB environment variables are not set")
 		}
-		database, err = db.NewMongoDB(mongoURI, mongoDBName, mongoCollection)
+
+		// Initialize the MongoDB instance
+		database, err := db.NewMongoDB(mongoURI, mongoDBName, mongoCollections)
 		if err != nil {
 			log.Fatalf("Failed to connect to MongoDB: %v", err)
 		}
+
+		// Use the MongoDB instance (e.g., for further operations)
+		_ = database
 	} else {
 		// Connect to SQLite or PostgreSQL
 		dbType := os.Getenv("DB_TYPE")
@@ -94,6 +101,8 @@ func main() {
 
 	// Set up routes with dependencies
 	routes.SetupRoutes(router, database, cloudinaryClient)
+	routes.SetupMessageRoutes(router, database, cloudinaryClient)
+	routes.SetupPostRoutes(router, database, cloudinaryClient)
 
 	// Catch-all route to serve index.html for SPA
 	// router.NoRoute(func(c *gin.Context) {
