@@ -17,16 +17,6 @@
 // 	DB db.Database
 // }
 
-// // GetUsers handles GET requests to retrieve users
-// func (uc *UserController) GetUsers(c *gin.Context) {
-// 	users, err := uc.DB.GetUsers()
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-// 	c.JSON(http.StatusOK, users)
-// }
-
 // func (uc *UserController) CreateUser(c *gin.Context) {
 // 	// Create an instance of the User struct
 // 	var user db.User
@@ -114,6 +104,31 @@ func InitUser(database db.Database, cloudinary *cloudinary.Cloudinary) {
 // 	}
 // 	return string(hashedPassword)
 // }
+
+func GetUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filter := bson.M{}
+
+		cursor, err := dbInstance.GetUsers(filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer cursor.Close(context.Background())
+
+		var users []db.User
+		for cursor.Next(context.Background()) {
+			var user db.User
+			if err := cursor.Decode(&user); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			users = append(users, user)
+		}
+
+		c.JSON(http.StatusOK, users)
+	}
+}
 
 // Register handles user registration
 func Register() gin.HandlerFunc {

@@ -15,6 +15,8 @@ func SetupRoutes(router *gin.Engine, database db.Database, cloudinaryClient *clo
 	// Create a new group for user-related routes
 	userRoutes := router.Group("/api/v1/user")
 	{
+		userRoutes.GET("", controller.GetUsers())
+
 		// Route for user registration
 		userRoutes.POST("/register", controller.Register())
 

@@ -156,8 +156,8 @@ func (db *MongoDB) UnfollowUser(followingUserID, targetUserID primitive.ObjectID
 	return err
 }
 
-func (db *MongoDB) GetUsers(filter interface{}) ([]User, error) {
-	collection, exists := db.GetCollection("users") // Specify the collection name
+func (db *MongoDB) GetUsers(filter interface{}) (*mongo.Cursor, error) {
+	collection, exists := db.GetCollection("users")
 	if !exists {
 		return nil, errors.New("collection 'users' does not exist")
 	}
@@ -166,17 +166,8 @@ func (db *MongoDB) GetUsers(filter interface{}) ([]User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(context.Background())
-
-	var users []User
-	for cursor.Next(context.Background()) {
-		var user User
-		if err := cursor.Decode(&user); err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-	return users, nil
+	// Do not close the cursor here; let the caller handle it.
+	return cursor, nil
 }
 
 func (db *MongoDB) GetUserByID(id primitive.ObjectID) (User, error) {
