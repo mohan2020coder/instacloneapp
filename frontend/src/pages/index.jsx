@@ -1,7 +1,28 @@
 import MainLayout from '@/components/MainLayout';
 import ProtectedRoutes from '../components/ProtectedRoutes'; // Make sure this component is correctly implemented
+import { useEffect } from 'react';
 
 const Home = () => {
+
+  const useTokenStorage = () => {
+    useEffect(() => {
+      const token = getTokenFromCookie('token'); // Replace with your cookie retrieval logic
+      localStorage.setItem('authToken', token);
+    }, []);
+  };
+  function getTokenFromCookie(cookieName) {
+    const cookies = document.cookie.split(';');
+  
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();   
+  
+      if (cookie.startsWith(cookieName + '=')) {
+        return cookie.substring(cookieName.length + 1);
+      }
+    }
+  
+  }
+  useTokenStorage();
   return (
     <ProtectedRoutes>
       <MainLayout>

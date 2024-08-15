@@ -22,9 +22,10 @@ func IsAuthenticated() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		//fmt.Println("User ID:", claims)
 
 		// Set user ID in the request context
-		c.Set("userId", claims["userId"])
+		c.Set("userID", claims["userID"])
 
 		// Proceed to the next handler
 		c.Next()
@@ -44,6 +45,8 @@ func extractClaims(c *gin.Context) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving token from cookie")
 	}
+
+	//fmt.Println("Token from cookie:", tokenString)
 
 	// Parse the token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"instacloneapp/server/socket"
 	"net/http"
 
@@ -24,25 +25,33 @@ import (
 // AddNewPost handles adding a new post
 func AddNewPost() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorID := c.Param("author_id")
-		authorIDObjectID, err := primitive.ObjectIDFromHex(authorID)
+		// Extract user ID from context
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "User ID not found in context"})
+			return
+		}
+
+		// Convert userID to ObjectID
+		authorIDObjectID, err := primitive.ObjectIDFromHex(userID.(string))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid author ID"})
 			return
 		}
 
-		// Parse the form to handle file upload and JSON data
+		// Parse the form to handle file upload and form fields
 		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Failed to parse form"})
 			return
 		}
 
-		// Assuming the image is uploaded as a file
+		// Get image file from the form
 		image, imageHeader, err := c.Request.FormFile("image")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Image required"})
 			return
 		}
+		fmt.Println("Uploaded Image Filename:", imageHeader.Filename)
 
 		// Upload image to Cloudinary
 		uploadResult, err := cloudinaryClient.Upload.Upload(context.Background(), image, uploader.UploadParams{
@@ -56,24 +65,22 @@ func AddNewPost() gin.HandlerFunc {
 		// Get the image URL from the upload result
 		imageURL := uploadResult.SecureURL
 
-		// Bind JSON data for caption
-		var req struct {
-			Caption string `json:"caption"`
-		}
-		if err := c.BindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
+		// Extract other form fields
+		caption := c.Request.FormValue("caption")
+		if caption == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Caption is required"})
 			return
 		}
 
 		// Create a new post
 		post := db.Post{
 			Author:  authorIDObjectID,
-			Caption: req.Caption,
+			Caption: caption,
 			Image:   imageURL,
 			// Set other necessary fields like CreatedAt, etc.
 		}
 
-		// Insert the post into the database and get a pointer to the created post
+		// Insert the post into the database
 		createdPost, err := dbInstance.CreatePost(post)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating post"})

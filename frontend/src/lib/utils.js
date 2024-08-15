@@ -14,3 +14,14 @@ export const readFileAsDataURL = (file) => {
     reader.readAsDataURL(file);
   })
 }
+
+
+// Function to retrieve token (implementation details depend on your authentication mechanism)
+export const  getToken = () =>{
+  // Replace with your logic to retrieve the access token from storage (e.g., localStorage)
+  const token = localStorage.getItem("accessToken");
+  if (!token) {
+    console.warn("No access token found. Authentication might be required.");
+  }
+  return token;
+}

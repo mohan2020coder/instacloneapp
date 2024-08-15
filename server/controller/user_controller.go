@@ -71,6 +71,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"instacloneapp/server/pkg/db"
 	"instacloneapp/server/utils"
 	"log"
@@ -217,6 +218,8 @@ func Login() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error generating token"})
 			return
 		}
+
+		fmt.Println("Token from cookie:", token)
 
 		// Set the token in the cookie
 		c.SetCookie("token", token, 24*60*60, "/", "", false, true)
@@ -404,8 +407,13 @@ func EditProfile() gin.HandlerFunc {
 // GetSuggestedUsers retrieves suggested users
 func GetSuggestedUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := c.Param("id")
-		objectID, err := primitive.ObjectIDFromHex(userID)
+		// userID := c.Param("id")
+		userID, exists := c.Get("userID") // The ID of the user initiating the follow/unfollow action
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthorized"})
+			return
+		}
+		objectID, err := primitive.ObjectIDFromHex(userID.(string))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid user ID"})
 			return
