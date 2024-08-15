@@ -68,9 +68,9 @@ func main() {
 		//fmt.Println(database)
 
 		// Check if database is properly initialized
-		if database == nil {
-			log.Fatalf("Database instance is nil after initialization")
-		}
+		// if database == nil {
+		// 	log.Fatalf("Database instance is nil after initialization")
+		// }
 	} else {
 		// Connect to SQLite or PostgreSQL
 		dbType := os.Getenv("DB_TYPE")

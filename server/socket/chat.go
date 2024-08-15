@@ -24,24 +24,25 @@ func GetReceiverSocketID(userID string) string {
 	defer mu.Unlock()
 	conn, ok := userSocketMap[userID]
 	if ok {
-		return conn.RemoteAddr().String() // Use appropriate method to get socket ID
+		return conn.RemoteAddr().String() // This might not be an ideal unique identifier
 	}
 	return ""
 }
 
 // BroadcastMessageToUser sends a message to a specific user
-func BroadcastMessageToUser(userSocketID, event string, message interface{}) {
+func BroadcastMessageToUser(userID, event string, message interface{}) {
 	mu.Lock()
 	defer mu.Unlock()
-	conn, ok := userSocketMap[userSocketID]
+	conn, ok := userSocketMap[userID]
 	if ok {
 		err := conn.WriteJSON(map[string]interface{}{
 			"event":   event,
 			"message": message,
 		})
 		if err != nil {
+			fmt.Printf("Error writing message to user %s: %v\n", userID, err)
 			conn.Close()
-			delete(userSocketMap, userSocketID)
+			delete(userSocketMap, userID)
 		}
 	}
 }
@@ -68,10 +69,11 @@ func HandleConnection(c *gin.Context) {
 	for {
 		messageType, msg, err := conn.ReadMessage()
 		if err != nil {
+			fmt.Printf("Error reading message: %v\n", err)
 			break
 		}
 		if messageType == websocket.TextMessage {
-			fmt.Printf("Received message: %s\n", msg)
+			fmt.Printf("Received message from %s: %s\n", userID, msg)
 		}
 	}
 
@@ -92,9 +94,10 @@ func broadcastOnlineUsers() {
 		onlineUsers = append(onlineUsers, userID)
 	}
 
-	for _, conn := range userSocketMap {
+	for userID, conn := range userSocketMap {
 		err := conn.WriteJSON(onlineUsers)
 		if err != nil {
+			fmt.Printf("Error broadcasting online users to %s: %v\n", userID, err)
 			conn.Close()
 		}
 	}
