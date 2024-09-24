@@ -2,10 +2,15 @@
 package utils
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"log"
+	"mime/multipart"
 	"os"
 
 	"github.com/cloudinary/cloudinary-go"
+	"github.com/cloudinary/cloudinary-go/api/uploader"
 	"github.com/joho/godotenv"
 )
 
@@ -30,4 +35,23 @@ func InitCloudinary() *cloudinary.Cloudinary {
 	}
 
 	return cloudinaryClient
+}
+
+// UploadImageToCloudinary uses the existing Cloudinary client to upload an image
+func UploadImageToCloudinary(cloudinaryClient *cloudinary.Cloudinary, image multipart.File, folder string) (string, error) {
+	// Read image file into a buffer
+	buf := bytes.NewBuffer(nil)
+	if _, err := buf.ReadFrom(image); err != nil {
+		return "", fmt.Errorf("failed to read image: %v", err)
+	}
+
+	// Upload image using the provided cloudinaryClient instance
+	uploadParams := uploader.UploadParams{Folder: folder} // Adjust folder as needed
+	resp, err := cloudinaryClient.Upload.Upload(context.TODO(), buf, uploadParams)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload image to Cloudinary: %v", err)
+	}
+
+	// Return the secure URL from Cloudinary
+	return resp.SecureURL, nil
 }
