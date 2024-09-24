@@ -4,8 +4,10 @@ package controller
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"instacloneapp/server/pkg/db"
 	"instacloneapp/server/utils"
+	"log"
 	"net/http"
 
 	"github.com/cloudinary/cloudinary-go"
@@ -37,6 +39,31 @@ func InitUser(database db.Database, cloudinary *cloudinary.Cloudinary) {
 // 	return string(hashedPassword)
 // }
 
+func GetUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filter := bson.M{}
+
+		cursor, err := dbInstance.GetUsers(filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer cursor.Close(context.Background())
+
+		var users []db.User
+		for cursor.Next(context.Background()) {
+			var user db.User
+			if err := cursor.Decode(&user); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			users = append(users, user)
+		}
+
+		c.JSON(http.StatusOK, users)
+	}
+}
+
 // Register handles user registration
 func Register() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -55,14 +82,19 @@ func Register() gin.HandlerFunc {
 			return
 		}
 
+		// Retrieve user by email
 		user, err := dbInstance.GetUserByEmail(req.Email)
 		if err != nil {
+			// Log the error for further investigation
+			log.Printf("Error checking email: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error checking email"})
 			return
 		}
 
-		if isEmptyUser(user) {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Email already in use"})
+		// Check if the user was found
+		// Assuming a zero value of user indicates "not found"
+		if user.Email != "" { // or any other field to check if user exists
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Email already exists"})
 			return
 		}
 
@@ -120,6 +152,8 @@ func Login() gin.HandlerFunc {
 			return
 		}
 
+		fmt.Println("Token from cookie:", token)
+
 		// Set the token in the cookie
 		c.SetCookie("token", token, 24*60*60, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
@@ -170,8 +204,8 @@ func EditProfile() gin.HandlerFunc {
 		}
 
 		var req struct {
-			Bio             string `json:"bio"`
-			Gender          string `json:"gender"`
+			Bio    string `json:"bio"`
+			Gender string `json:"gender"`
 		}
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
@@ -230,7 +264,7 @@ func EditProfile() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Profile updated successfully",
 			"success": true,
-			"user":   user,
+			"user":    user,
 		})
 	}
 }
@@ -306,8 +340,13 @@ func EditProfile() gin.HandlerFunc {
 // GetSuggestedUsers retrieves suggested users
 func GetSuggestedUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := c.Param("id")
-		objectID, err := primitive.ObjectIDFromHex(userID)
+		// userID := c.Param("id")
+		userID, exists := c.Get("userID") // The ID of the user initiating the follow/unfollow action
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthorized"})
+			return
+		}
+		objectID, err := primitive.ObjectIDFromHex(userID.(string))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid user ID"})
 			return

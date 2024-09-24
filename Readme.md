@@ -17,7 +17,7 @@ To run the application in development mode, use the following command:
 npm run dev
 
 
-This will start the NextJS development server and the Golang server.
+This will start the NextJS development server. 
 
 ## Server
 
@@ -32,3 +32,7 @@ This will start the Golang server and handle the backend logic of the applicatio
 
 
 # if you want to use the sql - models should be replaced with, the models in sqlite.go file intead of mongo 
+
+
+reference:
+https://github.com/Surendrakumarpatel/instaclone/tree/main/backend

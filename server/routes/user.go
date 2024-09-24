@@ -1,18 +1,3 @@
-// package routes
-
-// import (
-// 	"instacloneapp/server/controller"
-// 	"instacloneapp/server/pkg/db"
-
-// 	"github.com/gin-gonic/gin"
-// )
-
-// func SetupRoutes(router *gin.Engine, database db.Database) {
-// 	userController := &controller.UserController{DB: database}
-
-//		router.GET("/api/v1/user", userController.GetUsers)
-//		router.POST("/api/v1/user", userController.CreateUser)
-//	}
 package routes
 
 import (
@@ -30,6 +15,8 @@ func SetupRoutes(router *gin.Engine, database db.Database, cloudinaryClient *clo
 	// Create a new group for user-related routes
 	userRoutes := router.Group("/api/v1/user")
 	{
+		userRoutes.GET("", controller.GetUsers())
+
 		// Route for user registration
 		userRoutes.POST("/register", controller.Register())
 
