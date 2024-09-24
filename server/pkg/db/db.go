@@ -42,4 +42,8 @@ type Database interface {
 	GetCommentsByPostID(postID primitive.ObjectID) ([]Comment, error)
 
 	CreatePost(post Post) (*Post, error)
+	AddPostToUser(userID primitive.ObjectID, postID primitive.ObjectID) error
+	GetAllPosts() ([]Post, error)
+	GetPostsByUserID(authorID primitive.ObjectID) ([]Post, error)
+	AddLikeToPost(postID, userID primitive.ObjectID) error
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -454,179 +455,239 @@ func (db *MongoDB) GetMessagesByIDs(ids []primitive.ObjectID) ([]Message, error)
 }
 
 // GetConversation retrieves a conversation by participants' IDs
-func (db *MongoDB) GetConversation(senderID, receiverID primitive.ObjectID) (*Conversation, error) {
-	filter := bson.M{
-		"participants": bson.M{"$all": []primitive.ObjectID{senderID, receiverID}},
-	}
-	var conversation Conversation
-	err := db.collection.FindOne(context.Background(), filter).Decode(&conversation)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil // No conversation found
-		}
-		return nil, err
-	}
-	return &conversation, nil
-}
+// func (db *MongoDB) GetConversation(senderID, receiverID primitive.ObjectID) (*Conversation, error) {
+// 	filter := bson.M{
+// 		"participants": bson.M{"$all": []primitive.ObjectID{senderID, receiverID}},
+// 	}
+// 	var conversation Conversation
+// 	collection, exists := db.GetCollection("conversations") // Assuming you have a conversations collection
+// 	if !exists {
+// 		return nil, errors.New("collection 'conversations' does not exist")
+// 	}
+// 	err := collection.FindOne(context.Background(), filter).Decode(&conversation)
+// 	if err != nil {
+// 		if err == mongo.ErrNoDocuments {
+// 			return nil, nil // No conversation found
+// 		}
+// 		return nil, err
+// 	}
+// 	return &conversation, nil
+// }
 
 // UpdateConversation updates a conversation with the provided data
-func (db *MongoDB) UpdateConversation(id primitive.ObjectID, update interface{}) error {
-	filter := bson.M{"_id": id}
-	_, err := db.collection.UpdateOne(context.Background(), filter, update)
-	return err
-}
+// func (db *MongoDB) UpdateConversation(id primitive.ObjectID, update interface{}) error {
+// 	collection, exists := db.GetCollection("conversations") // Assuming you have a conversations collection
+// 	if !exists {
+// 		return errors.New("collection 'conversations' does not exist")
+// 	}
+// 	filter := bson.M{"_id": id}
+// 	_, err := collection.UpdateOne(context.Background(), filter, update)
+// 	return err
+// }
 
 // CreateMessage creates a new message
-func (db *MongoDB) CreateMessage(senderID, receiverID primitive.ObjectID, messageText string) (*Message, error) {
-	message := Message{
-		SenderID:   senderID,
-		ReceiverID: receiverID,
-		Message:    messageText,
-	}
-	result, err := db.collection.InsertOne(context.Background(), message)
-	if err != nil {
-		return nil, err
-	}
-	message.ID = result.InsertedID.(primitive.ObjectID)
-	return &message, nil
-}
+// func (db *MongoDB) CreateMessage(senderID, receiverID primitive.ObjectID, messageText string) (*Message, error) {
+// 	message := Message{
+// 		SenderID:   senderID,
+// 		ReceiverID: receiverID,
+// 		Message:    messageText,
+// 	}
+// 	collection, exists := db.GetCollection("messages") // Assuming you have a messages collection
+// 	if !exists {
+// 		return nil, errors.New("collection 'messages' does not exist")
+// 	}
+// 	result, err := collection.InsertOne(context.Background(), message)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	message.ID = result.InsertedID.(primitive.ObjectID)
+// 	return &message, nil
+// }
 
 // CreateConversation creates a new conversation
-func (db *MongoDB) CreateConversation(participant1, participant2 primitive.ObjectID) (*Conversation, error) {
-	conversation := Conversation{
-		Participants: []primitive.ObjectID{participant1, participant2},
-	}
-	result, err := db.collection.InsertOne(context.Background(), conversation)
-	if err != nil {
-		return nil, err
-	}
-	conversation.ID = result.InsertedID.(primitive.ObjectID)
-	return &conversation, nil
-}
+// func (db *MongoDB) CreateConversation(participant1, participant2 primitive.ObjectID) (*Conversation, error) {
+// 	conversation := Conversation{
+// 		Participants: []primitive.ObjectID{participant1, participant2},
+// 	}
+// 	collection, exists := db.GetCollection("conversations") // Assuming you have a conversations collection
+// 	if !exists {
+// 		return nil, errors.New("collection 'conversations' does not exist")
+// 	}
+// 	result, err := collection.InsertOne(context.Background(), conversation)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	conversation.ID = result.InsertedID.(primitive.ObjectID)
+// 	return &conversation, nil
+// }
 
 // RemoveBookmarkFromUser removes a bookmark from a user
-func (db *MongoDB) RemoveBookmarkFromUser(userID, postID primitive.ObjectID) error {
-	_, err := db.collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": userID},
-		bson.M{"$pull": bson.M{"bookmarks": postID}},
-	)
-	return err
-}
+// func (db *MongoDB) RemoveBookmarkFromUser(userID, postID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("users") // Assuming you have a users collection
+// 	if !exists {
+// 		return errors.New("collection 'users' does not exist")
+// 	}
+// 	_, err := collection.UpdateOne(
+// 		context.Background(),
+// 		bson.M{"_id": userID},
+// 		bson.M{"$pull": bson.M{"bookmarks": postID}},
+// 	)
+// 	return err
+// }
 
 // AddBookmarkToUser adds a bookmark to a user
-func (db *MongoDB) AddBookmarkToUser(userID, postID primitive.ObjectID) error {
-	_, err := db.collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": userID},
-		bson.M{"$addToSet": bson.M{"bookmarks": postID}},
-	)
-	return err
-}
+// func (db *MongoDB) AddBookmarkToUser(userID, postID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("users") // Assuming you have a users collection
+// 	if !exists {
+// 		return errors.New("collection 'users' does not exist")
+// 	}
+// 	_, err := collection.UpdateOne(
+// 		context.Background(),
+// 		bson.M{"_id": userID},
+// 		bson.M{"$addToSet": bson.M{"bookmarks": postID}},
+// 	)
+// 	return err
+// }
 
 // RemovePostFromUser removes a post ID from the user's list of posts
-func (db *MongoDB) RemovePostFromUser(userID, postID primitive.ObjectID) error {
-	_, err := db.collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": userID},
-		bson.M{"$pull": bson.M{"posts": postID}},
-	)
-	return err
-}
+// func (db *MongoDB) RemovePostFromUser(userID, postID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("users") // Assuming you have a users collection
+// 	if !exists {
+// 		return errors.New("collection 'users' does not exist")
+// 	}
+// 	_, err := collection.UpdateOne(
+// 		context.Background(),
+// 		bson.M{"_id": userID},
+// 		bson.M{"$pull": bson.M{"posts": postID}},
+// 	)
+// 	return err
+// }
 
 // CreateComment creates a new comment
-func (db *MongoDB) CreateComment(authorID, postID primitive.ObjectID, text string) (*Comment, error) {
-	comment := Comment{
-		Author: authorID,
-		Post:   postID,
-		Text:   text,
-	}
-	result, err := db.collection.InsertOne(context.Background(), comment)
-	if err != nil {
-		return nil, err
-	}
-	comment.ID = result.InsertedID.(primitive.ObjectID)
-	return &comment, nil
-}
+// func (db *MongoDB) CreateComment(authorID, postID primitive.ObjectID, text string) (*Comment, error) {
+// 	comment := Comment{
+// 		Author: authorID,
+// 		Post:   postID,
+// 		Text:   text,
+// 	}
+// 	collection, exists := db.GetCollection("comments") // Assuming you have a comments collection
+// 	if !exists {
+// 		return nil, errors.New("collection 'comments' does not exist")
+// 	}
+// 	result, err := collection.InsertOne(context.Background(), comment)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	comment.ID = result.InsertedID.(primitive.ObjectID)
+// 	return &comment, nil
+// }
 
 // DeleteCommentsByPostID deletes comments by post ID
-func (db *MongoDB) DeleteCommentsByPostID(postID primitive.ObjectID) error {
-	_, err := db.collection.DeleteMany(context.Background(), bson.M{"post": postID})
-	return err
-}
+// func (db *MongoDB) DeleteCommentsByPostID(postID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("comments") // Assuming you have a comments collection
+// 	if !exists {
+// 		return errors.New("collection 'comments' does not exist")
+// 	}
+// 	_, err := collection.DeleteMany(context.Background(), bson.M{"post": postID})
+// 	return err
+// }
 
 // GetPostByID retrieves a post by its ID
-func (db *MongoDB) GetPostByID(postID primitive.ObjectID) (*Post, error) {
-	var post Post
-	err := db.collection.FindOne(context.Background(), bson.M{"_id": postID}).Decode(&post)
-	if err != nil {
-		return nil, err
-	}
-	return &post, nil
-}
+// func (db *MongoDB) GetPostByID(postID primitive.ObjectID) (*Post, error) {
+// 	var post Post
+// 	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+// 	if !exists {
+// 		return nil, errors.New("collection 'posts' does not exist")
+// 	}
+// 	err := collection.FindOne(context.Background(), bson.M{"_id": postID}).Decode(&post)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &post, nil
+// }
 
 // RemoveLikeFromPost removes a like from a post
-func (db *MongoDB) RemoveLikeFromPost(postID, userID primitive.ObjectID) error {
-	_, err := db.collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": postID},
-		bson.M{"$pull": bson.M{"likes": userID}},
-	)
-	return err
-}
+// func (db *MongoDB) RemoveLikeFromPost(postID, userID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+// 	if !exists {
+// 		return errors.New("collection 'posts' does not exist")
+// 	}
+// 	_, err := collection.UpdateOne(
+// 		context.Background(),
+// 		bson.M{"_id": postID},
+// 		bson.M{"$pull": bson.M{"likes": userID}},
+// 	)
+// 	return err
+// }
+
 // AddLikeToPost adds a user ID to the likes array of the specified post
 func (db *MongoDB) AddLikeToPost(postID, userID primitive.ObjectID) error {
-	// Perform the update operation, using $addToSet to prevent duplicate entries in the array
-	_, err := db.collection.UpdateOne(
+	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+	if !exists {
+		return errors.New("collection 'posts' does not exist")
+	}
+	_, err := collection.UpdateOne(
 		context.Background(),
 		bson.M{"_id": postID},
 		bson.M{"$addToSet": bson.M{"likes": userID}}, // $addToSet ensures the userID is only added once
 	)
 	return err
 }
+
 // AddCommentToPost adds a comment to a post
-func (db *MongoDB) AddCommentToPost(postID, commentID primitive.ObjectID) error {
-	_, err := db.collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": postID},
-		bson.M{"$push": bson.M{"comments": commentID}},
-	)
-	return err
-}
+// func (db *MongoDB) AddCommentToPost(postID, commentID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+// 	if !exists {
+// 		return errors.New("collection 'posts' does not exist")
+// 	}
+// 	_, err := collection.UpdateOne(
+// 		context.Background(),
+// 		bson.M{"_id": postID},
+// 		bson.M{"$push": bson.M{"comments": commentID}},
+// 	)
+// 	return err
+// }
 
 // DeletePost deletes a post by its ID
-func (db *MongoDB) DeletePost(postID primitive.ObjectID) error {
-	_, err := db.collection.DeleteOne(context.Background(), bson.M{"_id": postID})
-	return err
-}
+// func (db *MongoDB) DeletePost(postID primitive.ObjectID) error {
+// 	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+// 	if !exists {
+// 		return errors.New("collection 'posts' does not exist")
+// 	}
+// 	_, err := collection.DeleteOne(context.Background(), bson.M{"_id": postID})
+// 	return err
+// }
 
 // GetCommentsByPostID retrieves comments for a post by its ID
-func (db *MongoDB) GetCommentsByPostID(postID primitive.ObjectID) ([]Comment, error) {
-	cursor, err := db.collection.Find(context.Background(), bson.M{"post": postID})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(context.Background())
+// func (db *MongoDB) GetCommentsByPostID(postID primitive.ObjectID) ([]Comment, error) {
+// 	collection, exists := db.GetCollection("comments") // Get the collection and existence flag
+// 	if !exists {
+// 		return nil, errors.New("collection 'comments' does not exist")
+// 	}
+// 	cursor, err := collection.Find(context.Background(), bson.M{"post": postID})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer cursor.Close(context.Background())
 
-	var comments []Comment
-	for cursor.Next(context.Background()) {
-		var comment Comment
-		if err := cursor.Decode(&comment); err != nil {
-			return nil, err
-		}
-		comments = append(comments, comment)
-	}
-	return comments, nil
-}
+// 	var comments []Comment
+// 	for cursor.Next(context.Background()) {
+// 		var comment Comment
+// 		if err := cursor.Decode(&comment); err != nil {
+// 			return nil, err
+// 		}
+// 		comments = append(comments, comment)
+// 	}
+// 	return comments, nil
+// }
 
 // CreatePost creates a new post in the database
-
 func (db *MongoDB) CreatePost(post Post) (*Post, error) {
 	// Set the created time for the post
 	post.CreatedAt = time.Now()
 
 	// Get the collection
-	collection, exists := db.GetCollection("posts")
+	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
 	if !exists {
 		return nil, errors.New("collection 'posts' does not exist")
 	}
@@ -644,6 +705,11 @@ func (db *MongoDB) CreatePost(post Post) (*Post, error) {
 
 // AddPostToUser adds the post ID to the user's posts array in the database
 func (db *MongoDB) AddPostToUser(userID primitive.ObjectID, postID primitive.ObjectID) error {
+	collection, exists := db.GetCollection("users") // Get the collection and existence flag
+	if !exists {
+		return errors.New("collection 'users' does not exist")
+	}
+
 	// Define the filter to find the user by ID
 	filter := bson.M{"_id": userID}
 
@@ -654,27 +720,27 @@ func (db *MongoDB) AddPostToUser(userID primitive.ObjectID, postID primitive.Obj
 	}
 
 	// Perform the update operation
-	_, err := db.collection.UpdateOne(context.Background(), filter, update)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err := collection.UpdateOne(context.Background(), filter, update)
+	return err
 }
 
 // GetAllPosts retrieves all posts from the MongoDB posts collection
 func (db *MongoDB) GetAllPosts() ([]Post, error) {
+	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+	if !exists {
+		return nil, errors.New("collection 'posts' does not exist")
+	}
 
-	filter := bson.M{}
+	// Create an empty filter to match all documents
+	filter := bson.M{} // Corrected to use bson.M for an empty filter
 
-	cursor, err := db.collection.Find(context.Background(), filter)
+	cursor, err := collection.Find(context.Background(), filter)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(context.Background())
 
 	var posts []Post
-
 	for cursor.Next(context.Background()) {
 		var post Post
 		if err := cursor.Decode(&post); err != nil {
@@ -692,19 +758,21 @@ func (db *MongoDB) GetAllPosts() ([]Post, error) {
 
 // GetPostsByUserID retrieves all posts from the posts collection that match the author ID
 func (db *MongoDB) GetPostsByUserID(authorID primitive.ObjectID) ([]Post, error) {
+	collection, exists := db.GetCollection("posts") // Get the collection and existence flag
+	if !exists {
+		return nil, errors.New("collection 'posts' does not exist")
+	}
 
 	filter := bson.M{"author": authorID}
-
 	opts := options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}})
 
-	cursor, err := db.collection.Find(context.Background(), filter, opts)
+	cursor, err := collection.Find(context.Background(), filter, opts)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(context.Background())
 
 	var posts []Post
-
 	for cursor.Next(context.Background()) {
 		var post Post
 		if err := cursor.Decode(&post); err != nil {

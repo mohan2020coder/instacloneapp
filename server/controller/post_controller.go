@@ -1,30 +1,30 @@
 package controller
 
 import (
+	"fmt"
+	"instacloneapp/server/pkg/db"
 	"instacloneapp/server/socket"
 	"instacloneapp/server/utils"
 	"net/http"
 	"time"
 
-	"instacloneapp/server/pkg/db"
-
-	"github.com/cloudinary/cloudinary-go/api/uploader"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // getUserIDFromContext retrieves the user ID from the Gin context
-// func getUserIDFromContext(c *gin.Context) string {
-// 	if userID, exists := c.Get("userId"); exists {
-// 		return userID.(string)
-// 	}
-// 	return ""
-// }
+func getUserIDFromContext(c *gin.Context) string {
+	if userID, exists := c.Get("userId"); exists {
+		return userID.(string)
+	}
+	return ""
+}
 
 // AddNewPost handles adding a new post
 func AddNewPost() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Extract author ID from URL parameters
 		authorID := c.Param("author_id")
 		authorIDObjectID, err := primitive.ObjectIDFromHex(authorID)
 		if err != nil {
@@ -32,42 +32,54 @@ func AddNewPost() gin.HandlerFunc {
 			return
 		}
 
+		// Parse caption from the request body
 		var req struct {
 			Caption string `json:"caption"`
 		}
-
-		// Assuming the image is uploaded as a file
-		image, _, err := c.Request.FormFile("image")
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Image required", "data": image})
-			return
-		}
-
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input"})
 			return
 		}
 
-		// Process image and upload it (replace with actual implementation)
-		imageURL := "image_url_from_cloudinary" // Replace with actual URL from cloud storage
+		// Get the image from form data
+		image, _, err := c.Request.FormFile("image")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Image required"})
+			return
+		}
+		defer image.Close()
 
-		// Create new post
-		post, err := dbInstance.CreatePost(authorIDObjectID, req.Caption, imageURL)
+		// Upload the image using the existing Cloudinary client
+		imageURL, err := utils.UploadImageToCloudinary(cloudinaryClient, image, "posts")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error uploading image"})
+			return
+		}
+		// Create a Post object
+		postInput := db.Post{
+			Caption:   req.Caption,
+			Image:     imageURL,
+			Author:    authorIDObjectID,
+			CreatedAt: time.Now(),
+		}
+		// Create a new post in the database
+		post, err := dbInstance.CreatePost(postInput)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating post"})
 			return
 		}
 
-		// Update user with new post
+		// Update user by adding the post ID to the user's posts array
 		err = dbInstance.AddPostToUser(authorIDObjectID, post.ID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error updating user with post"})
 			return
 		}
 
+		// Return success response
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "New post added",
-			"post":    createdPost,
+			"post":    postInput,
 			"success": true,
 		})
 	}
@@ -174,7 +186,10 @@ func DislikePost() gin.HandlerFunc {
 			return
 		}
 
-		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
+		userID, err := primitive.ObjectIDFromHex(getUserIDFromContext(c)) // Extract user ID from the context or request
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid User ID"})
 
 			return
 		}
@@ -184,14 +199,14 @@ func DislikePost() gin.HandlerFunc {
 			return
 		}
 
-		err = dbInstance.RemoveLikeFromPost(postID, userUID)
+		err = dbInstance.RemoveLikeFromPost(postID, userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error disliking post"})
 			return
 		}
 
 		// Implement socket.io for real-time notification
-		user, err := dbInstance.GetUserByID(userUID)
+		user, err := dbInstance.GetUserByID(userID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"message": "User not found"})
 			return
@@ -206,6 +221,7 @@ func DislikePost() gin.HandlerFunc {
 				"postId":  postID,
 				"message": "Your post was disliked",
 			}
+
 			socketID := socket.GetReceiverSocketID(postOwnerID)
 			if socketID != "" {
 				socket.BroadcastMessageToUser(socketID, "notification", notification)
@@ -228,7 +244,11 @@ func AddComment() gin.HandlerFunc {
 			return
 		}
 
-		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
+		userID, err := primitive.ObjectIDFromHex(getUserIDFromContext(c)) // Extract user ID from the context or request
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid User ID"})
+			return
+		}
 
 		var req struct {
 			Text string `json:"text"`
@@ -243,7 +263,7 @@ func AddComment() gin.HandlerFunc {
 			return
 		}
 
-		comment, err := dbInstance.CreateComment(userUID, postID, req.Text)
+		comment, err := dbInstance.CreateComment(userID, postID, req.Text)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error creating comment"})
 			return
@@ -294,7 +314,11 @@ func DeletePost() gin.HandlerFunc {
 			return
 		}
 
-		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
+		userID, err := primitive.ObjectIDFromHex(getUserIDFromContext(c)) // Extract user ID from the context or request
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid User ID"})
+			return
+		}
 
 		post, err := dbInstance.GetPostByID(postID)
 		if err != nil {
@@ -319,7 +343,7 @@ func DeletePost() gin.HandlerFunc {
 			return
 		}
 
-		err = dbInstance.RemovePostFromUser(userUID, postID)
+		err = dbInstance.RemovePostFromUser(userID, postID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error updating user posts"})
 			return
@@ -343,18 +367,21 @@ func BookmarkPost() gin.HandlerFunc {
 			return
 		}
 
-		userID := getUserIDFromContext(c.Request) // Extract user ID from the context or request
-
-		userUID, err := primitive.ObjectIDFromHex(userID.(string))
+		userID, err := primitive.ObjectIDFromHex(getUserIDFromContext(c)) // Extract user ID from the context or request
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid User ID"})
 			return
 		}
 
+		post, err := dbInstance.GetPostByID(postID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Post not found"})
+			return
+		}
+
 		fmt.Println(post)
 
-		// Retrieve the user by their ID
-		user, err := dbInstance.GetUserByID(userUID)
+		user, err := dbInstance.GetUserByID(userID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"message": "User not found"})
 			return
@@ -363,7 +390,7 @@ func BookmarkPost() gin.HandlerFunc {
 		// Check if the post is already bookmarked by the user
 		if contains(user.Bookmarks, postID) {
 			// Remove bookmark if it already exists
-			err = dbInstance.RemoveBookmarkFromUser(userUID, postID)
+			err = dbInstance.RemoveBookmarkFromUser(userID, postID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Error removing bookmark"})
 				return
@@ -375,7 +402,7 @@ func BookmarkPost() gin.HandlerFunc {
 			})
 		} else {
 			// Add bookmark if it doesn't exist
-			err = dbInstance.AddBookmarkToUser(userUID, postID)
+			err = dbInstance.AddBookmarkToUser(userID, postID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Error adding bookmark"})
 				return
